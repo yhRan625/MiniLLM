@@ -1,6 +1,8 @@
 """
-模型配置：定义 LLM 的所有超参数
-
+模型配置：定义 LLM 的所有超参数Hyperparameter
+人提前手动设定、模型不会自己学习、全程固定不变的配置
+训练开始前就要定好，梯度不会更新它，用来控制「模型长什么样、怎么训练、怎么生成」，
+全部写在你的 ModelConfig 里的变量，全都是超参数。
 所有模块都从这里读取配置，修改一处即可全局生效。
 
 设计原则：
@@ -73,7 +75,7 @@ class ModelConfig:
     # 训练基础设施
     # ============================================================
 
-    bf16: bool = True                # 使用 bfloat16 混合精度
+    fp16: bool = True                # T4 使用 FP16 混合精度
     max_grad_norm: float = 1.0       # 梯度裁剪阈值
     log_interval: int = 100          # 每 N 步打印 loss
     save_interval: int = 1000        # 每 N 步保存 checkpoint

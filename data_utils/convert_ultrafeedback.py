@@ -1,4 +1,4 @@
-"""将 ultrafeedback parquet 转换为 jsonl 格式
+"""将 在DPO阶段，ultrafeedback parquet 转换为 jsonl 格式
 
 转换后的格式：
 {

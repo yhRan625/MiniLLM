@@ -56,8 +56,9 @@ class RMSNorm(nn.Module):
         返回：(..., dim)，形状不变
 
         ★ 为什么要转 float32？
-           bf16 只有 7 位有效数字，计算 mean(x²) 时精度不够，
+           FP16 精度和数值范围有限，计算 mean(x²) 时容易产生累计误差，
            累积误差会导致归一化结果不准确，影响训练稳定性。
+           因此 RMSNorm 内部使用 FP32 计算，最后再转回输入 dtype。
         """
         # 步骤 1-2: 转 float32，计算 RMS = sqrt(mean(x²) + eps)
         rms = torch.sqrt(x.float().pow(2).mean(-1, keepdim=True) + self.eps)
@@ -87,7 +88,7 @@ class TransformerBlock(nn.Module):
         self.layer_idx = layer_idx  # 层索引，用于 KV Cache 定位
         # Attention 分支：先 norm 再 attention
         self.norm1 = RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.attn = CausalSelfAttention(config)
+        self.attn = CausalSelfAttention(config) #CausalSelfAttention是在attention.py实现
         # FFN 分支：先 norm 再 ffn
         self.norm2 = RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.ffn = SwiGLU(config)

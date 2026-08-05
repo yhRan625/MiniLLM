@@ -21,6 +21,7 @@ import torch.nn.functional as F
 from .config import ModelConfig
 from .rope import RotaryEmbedding, apply_rotary_pos_emb
 
+# from custom_flash_attn.attn_wrapper import flash_attention2
 
 class KVCache:
     """KV Cache：缓存历史 token 的 K 和 V
@@ -80,10 +81,11 @@ class CausalSelfAttention(nn.Module):
         self.head_dim = config.head_dim  # = hidden_size // num_heads
         self.num_groups = config.num_heads // config.num_kv_heads  # 每组 Q 共享一个 KV
 
+# 创建tensor
         self.q_proj = nn.Linear(config.hidden_size, config.num_heads * config.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_kv_heads * config.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_kv_heads * config.head_dim, bias=False)
-        self.o_proj = nn.Linear(config.num_heads * config.head_dim, config.hidden_size, bias=False)
+        self.o_proj = nn.Linear(config.num_heads * config.head_dim, config.hidden_size, bias=False) #存output
 
         # RoPE 位置编码
         self.rope = RotaryEmbedding(self.head_dim, config.max_seq_len, config.rope_theta)
@@ -128,11 +130,11 @@ class CausalSelfAttention(nn.Module):
         k = k.view(batch_size, seq_len, self.num_kv_heads, self.head_dim)
         v = v.view(batch_size, seq_len, self.num_kv_heads, self.head_dim)
 
-        # 步骤 3: RoPE 位置编码
+        # 步骤 3: RoPE 位置编码，只作用在q，k
         q, k = apply_rotary_pos_emb(q, k, freqs)
 
         # 步骤 4: KV Cache
-        if kv_cache is not None:
+        if kv_cache is not None:#推理的时候才需要
             k, v = kv_cache.update(layer_idx, k, v)
         # 步骤 5: GQA 广播 — 把 KV 头复制到和 Q 头数一样
         if self.num_groups > 1:
@@ -140,7 +142,6 @@ class CausalSelfAttention(nn.Module):
             k = k.unsqueeze(3)  # (1, 10, 4, 1, 64)
             # expand 复制 2 次
             k = k.expand(-1, -1, -1, self.num_groups, -1)  # (1, 10, 4, 2, 64)
-            # reshape 把 4×2 合并成 8
             k = k.reshape(batch_size, -1, self.num_heads, self.head_dim)  # (1, 10, 8, 64)
 
             # v 同理
@@ -152,6 +153,7 @@ class CausalSelfAttention(nn.Module):
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
+# ====== 【这整块全部替换成你的FlashAttention2】======
         # 步骤 7: 注意力分数 = Q @ K^T / √head_dim
         # 每个 Q 和每个 K 做点积，除以 √64 防止数值过大
         scores = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim ** 0.5)
@@ -162,8 +164,17 @@ class CausalSelfAttention(nn.Module):
             scores.masked_fill_(causal_mask.unsqueeze(0).unsqueeze(0), float("-inf"))
 
         # 步骤 9: softmax 归一化 → 加权求和
-        attn_weights = F.softmax(scores, dim=-1)
+        # attn_weights = F.softmax(scores, dim=-1)
+        # attn_output = torch.matmul(attn_weights, v)
+        
+        attn_weights = F.softmax(scores, dim=-1, dtype=torch.float32)
+        attn_weights = attn_weights.to(v.dtype)
         attn_output = torch.matmul(attn_weights, v)
+# =====================================================
+    
+
+    
+# 分两种场景写替换代码（区分训练 / Prefill 和 Decode 推理）
 
         # 步骤 10-11: 转置回来 + 合并头 + 输出投影
         attn_output = attn_output.transpose(1, 2).contiguous()

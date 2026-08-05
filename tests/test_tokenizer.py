@@ -1,5 +1,6 @@
 """
 Tokenizer 单元测试
+给训练后的 tokenizer artifact 加了测试，验证 encode/decode、特殊 token ID 和词表大小是否正确。
 """
 
 import sys
@@ -8,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import sentencepiece as spm
 
-
+# 训练好的 tokenizer 能不能把一句文本 encode 成 ids，再 decode 回原文
 def test_tokenizer_roundtrip():
     """测试 encode → decode 是否一致"""
     # 1. 加载训练好的 tokenizer
@@ -19,7 +20,7 @@ def test_tokenizer_roundtrip():
     text = "你好，世界！"
     encoded = tokenizer.Encode(text)
 
-    # 3. 解码回去
+    # 3. 解码回去，理想情况下，decode 回来的文本应该和原文一模一样。
     decoded = tokenizer.Decode(encoded)
 
     # 4. 断言原始文本 == 解码文本

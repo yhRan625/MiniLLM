@@ -1,5 +1,5 @@
 """
-预训练语料清洗
+预训练语料清洗，完毕后抽了一个 sample 给 tokenizer
 
 从原始 JSONL 文件中提取文本，清洗后输出纯文本文件（一行一句）。
 
@@ -70,20 +70,20 @@ def clean_corpus(input_path: Path, output_dir: Path, valid_ratio: float = 0.02):
     total, kept, dropped = 0, 0, 0
 
     with open(input_path, "r", encoding="utf-8") as f:
-        for line in f:
+        for line in f:#逐行清洗
             total += 1
             try:
                 data = json.loads(line)
                 raw_text = data.get("text", "")
-            except json.JSONDecodeError:
+            except json.JSONDecodeError:#如果json格式坏了 内容直接drop
                 dropped += 1
                 continue
 
-            cleaned = clean_text(raw_text)
-            if cleaned:
+            cleaned = clean_text(raw_text) #清洗过的内容
+            if cleaned:#清洗过的内容不是NONE
                 texts.append(cleaned)
                 kept += 1
-            else:
+            else:#清洗过的内容NONE
                 dropped += 1
 
     print(f"清洗完成: 总计 {total} 条, 保留 {kept} 条 ({kept/total*100:.1f}%), 丢弃 {dropped} 条")
@@ -94,8 +94,9 @@ def clean_corpus(input_path: Path, output_dir: Path, valid_ratio: float = 0.02):
     valid_texts = texts[split_idx:]
 
     # 写入文件
-    train_path = output_dir / "train.txt"
+    train_path = output_dir / "train.txt" 
     valid_path = output_dir / "valid.txt"
+    # 所以train_path等价于data/pretrain_clean/train.txt
 
     with open(train_path, "w", encoding="utf-8") as f:
         f.write("\n".join(train_texts))
@@ -105,8 +106,8 @@ def clean_corpus(input_path: Path, output_dir: Path, valid_ratio: float = 0.02):
 
     # Tokenizer 训练语料（取前 15MB）
     tokenizer_path = output_dir / "tokenizer_corpus.txt"
-    all_text = "\n".join(texts)
-    sample = all_text[:15 * 1024 * 1024]
+    all_text = "\n".join(texts)#将清洗完的句子变成一个超大字符串（换行的那种）
+    sample = all_text[:15 * 1024 * 1024] #抽样，15 * 1024 * 1024=15728640 Bytes ≈15MB，最终取前15mb！！
     with open(tokenizer_path, "w", encoding="utf-8") as f:
         f.write(sample)
 

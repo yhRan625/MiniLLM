@@ -75,7 +75,7 @@ def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, freqs: torch.Tensor):
         freqs: (seq_len, head_dim // 2) — 来自 precompute_rope_frequencies
 
     步骤：
-    1. 把 q, k 转成 float32 避免 bf16 精度问题
+    1. 把 q, k 转成 float32 避免 fp16 精度问题
        提示: q.float()
 
     2. 把最后一维拆成 (dim//2, 2) 的形式
@@ -100,7 +100,7 @@ def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, freqs: torch.Tensor):
        32 个角度各不相同（来自不同的 freq[i]），实现多尺度位置编码。
 
     ★ 为什么要转 float32？
-       bf16 只有 7 位有效数字，旋转涉及 cos/sin 乘法，精度不够会导致
+       fp16 只有 7 位有效数字，旋转涉及 cos/sin 乘法，精度不够会导致
        旋转后向量长度改变（理论上旋转不改变长度），累积误差影响训练稳定性。
     """
     # 步骤 1: 转 float32，拆成 (..., dim//2, 2) 对

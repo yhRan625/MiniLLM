@@ -1,6 +1,9 @@
 """
 完整 LLM 模型：将所有组件组装成 Decoder-only Transformer
 
+这份 MiniLLM 类是模型前向、推理生成的顶层封装逻辑，完整覆盖「训练前向传播」+「自回归推理（带 KV Cache）」两条主流程，
+但它只负责顶层调度，完整计算拆分在其他文件里，不是所有数学计算都写在这一个文件。
+
 结构：
   Token Embeddings
       ↓
@@ -25,28 +28,41 @@ class MiniLLM(nn.Module):
     """Decoder-only Transformer（LLaMA2 架构）"""
 
     def __init__(self, config: ModelConfig):
+    # 创建对象、分配权重空间，完全不跑张量运算
         super().__init__()
         self.config = config
 
         # 1. Token Embedding 层，将 token ids 转换为 hidden_size 维的向量表示
         self.tok_emb = nn.Embedding(config.vocab_size, config.hidden_size)
+        # Embedding是PyTorch内置函数，config.vocab_size词表大小=6400, config.hidden_size是embedding的维度=512，
+        # 其他走默认值
         
         # 2. TransformerBlock 层，每个层包含一个 Self-Attention 层和一个 FeedForward 层
         self.layers = nn.ModuleList([TransformerBlock(config, i) for i in range(config.num_layers)])
+#        nn.ModuleList：直接调用 PyTorch 官方，不是你写的
+# 来源：import torch.nn as nn
+# 作用：专门存放多个网络层、自动注册参数到模型，方便循环遍历。
+        
+        # TransformerBlock是你在 block.py 文件中独立实现的类
         
         # 3. RMSNorm 层，对 TransformerBlock 输出进行归一化
         self.norm = RMSNorm(config.hidden_size, config.rms_norm_eps)
+        # 循环走完全部 12 层 TransformerBlock（每层内部包含 Attn、FFN、RoPE 旋转、KV 缓存更新）
 
         # 4. LM Head 层，将归一化后的 hidden_size 维向量转换为 vocab_size 维的概率分布
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        # 全局最后一层 RMSNorm 归一化
         
         # 5. Rotary Embedding 层，用于计算 RoPE 频率
         self.rope = RotaryEmbedding(config.head_dim, config.max_seq_len, config.rope_theta)
 
         # 权重绑定：lm_head 和 tok_emb 共享权重，减少 ~3.3M 参数
         self.lm_head.weight = self.tok_emb.weight
+        # 意思是 embedding 权重和 LM Head 权重共享。
+        # 也就是输入 token 用这个表查 embedding，最后输出 logits 时也用同一张表做投影。
 
     def forward(
+        # 训练前向
         self,
         input_ids: torch.Tensor,
         kv_cache: KVCache = None,
@@ -91,6 +107,7 @@ class MiniLLM(nn.Module):
 
     @torch.no_grad()
     def generate(
+        # 推理
         self,
         input_ids: torch.Tensor,
         max_new_tokens: int = 256,
@@ -144,7 +161,8 @@ class MiniLLM(nn.Module):
             # top-p 过滤（标准 nucleus sampling）
             if top_p < 1.0:
                 sorted_logits, sorted_indices = torch.sort(next_logits, descending=True)
-                cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+                cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1, dtype=torch.float32),dim=-1,)
+
                 # 标记需要移除的 token：累积概率超过 top_p 的
                 sorted_indices_to_remove = cumulative_probs > top_p
                 # 至少保留 1 个 token（右移一位，第一个永远保留）
@@ -155,7 +173,9 @@ class MiniLLM(nn.Module):
                 next_logits[indices_to_remove] = float('-inf')
 
             # 采样
-            probs = F.softmax(next_logits, dim=-1)
+            probs = F.softmax(next_logits, dim=-1, dtype=torch.float32)
+            # 这里不需要再转回FP16，因为：torch.multinomial(probs, num_samples=1)可以直接读取FP32概率，并返回整数类型的token ID
+
             next_token = torch.multinomial(probs, num_samples=1)  # (1, 1)
 
             # 拼接到 generated

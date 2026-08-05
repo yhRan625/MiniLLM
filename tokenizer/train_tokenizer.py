@@ -18,14 +18,14 @@ BPE（Byte Pair Encoding）原理：
 import argparse                    # 命令行参数解析，让脚本支持 --corpus、--vocab-size 等参数
 from pathlib import Path           # 路径处理，比字符串拼接更安全
 
-import sentencepiece as spm        # Google 的分词库，支持 BPE、Unigram 等多种算法
+import sentencepiece as spm        # Google 的分词库，支持 BPE、Unigram 等多种算法，项目就是用SentencePiece训练BPE Tokenizer
 
 
 def train_bpe_tokenizer(
     corpus_path: Path,
-    vocab_size: int = 6400,
+    vocab_size: int = 6400, #词表大小6400
     model_prefix: str = "tokenizer/bpe",
-    model_type: str = "bpe",
+    model_type: str = "bpe", #会按照bpe来算 调用sentencepiece的工具
 ):
     """训练 BPE Tokenizer
 
@@ -40,12 +40,16 @@ def train_bpe_tokenizer(
         {model_prefix}.vocab  → 词表文件（查看用）
     """
     spm.SentencePieceTrainer.train(
-        input = str(corpus_path),    # 语料文件路径，必须是纯文本，一行一句
+        input = str(corpus_path),    # 指向的是文本文件，例如危机比阿克，小说，新闻...语料文件路径，必须是纯文本，一行一句
         model_prefix = model_prefix, # 输出文件的前缀，会生成 bpe.model 和 bpe.vocab
         vocab_size = vocab_size,     # 词表大小，6400 意味着最终有 6400 个 token
         model_type = model_type,     # "bpe" 表示用字节对编码，还有 "unigram" 等选项
-        character_coverage=0.9995,   # 字符覆盖率：99.95% 的字符会被保留
+        character_coverage=0.9995,   # 清洗数据，字符覆盖率：99.95% 的字符会被保留
                                      # 中文需要高覆盖率，否则生僻字会被丢弃
+
+        normalization_rule_name="identity",  # 不把全角标点规范化为半角
+        remove_extra_whitespaces=False,      # 不主动删除/合并多余空格
+        byte_fallback=True,
         pad_id=0,                    # <pad> 填充 token，ID=0，用于 batch 中补齐短序列
         bos_id=1,                    # <bos> 句子开始 token，ID=1
         eos_id=2,                    # <eos> 句子结束 token，ID=2
@@ -100,5 +104,5 @@ if __name__ == "__main__":
 
     # 第 1 步：训练 tokenizer（生成 bpe.model 和 bpe.vocab）
     train_bpe_tokenizer(args.corpus, args.vocab_size, args.output_prefix)
-    # 第 2 步：立即测试，确认编码/解码正常
+    # 第 2 步：立即测试，确认编码/解码正常，相当于Smoke Test（快速自测）
     test_tokenizer(args.output_prefix)

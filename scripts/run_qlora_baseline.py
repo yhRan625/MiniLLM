@@ -74,7 +74,7 @@ def main():
         "lr": 2e-4,
         "warmup_ratio": 0.03,
         "max_length": 512,
-        "bf16": True,
+        "fp16": True,
         "gradient_checkpointing": True,
     }
 
@@ -100,7 +100,7 @@ def main():
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
         bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_compute_dtype=torch.float16,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
@@ -198,8 +198,8 @@ def main():
         logging_steps=50,
         save_steps=500,
         save_total_limit=3,
-        fp16=False,
-        bf16=training_config["bf16"],
+        fp16=training_config["fp16"],
+        bf16=False,
         optim="paged_adamw_8bit",
         gradient_checkpointing=training_config["gradient_checkpointing"],
         report_to="none",

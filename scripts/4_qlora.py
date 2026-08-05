@@ -55,7 +55,7 @@ def main():
         load_in_4bit=True,                    # 4-bit 量化
         bnb_4bit_quant_type="nf4",            # NF4 量化类型
         bnb_4bit_use_double_quant=True,       # 双重量化（进一步压缩）
-        bnb_4bit_compute_dtype=torch.bfloat16,  # 计算时用 bf16
+        bnb_4bit_compute_dtype=torch.float16,  # 计算时用 fp16
     )
 
     # 加载 tokenizer
@@ -161,8 +161,8 @@ def main():
         logging_steps=args.log_interval,
         save_steps=500,
         save_total_limit=3,
-        fp16=False,
-        bf16=True,
+        bf16=False,
+        fp16=True,
         optim="paged_adamw_8bit",  # 8-bit 优化器，省显存
         gradient_checkpointing=True,  # 梯度检查点，省显存
         report_to="none",
